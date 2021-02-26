@@ -1,0 +1,26 @@
+---
+name: cmd_info
+commands:
+  - name: iA
+    summary: List archs
+    cname: info_archs
+    modes:
+      - RZ_OUTPUT_MODE_STANDARD
+      - RZ_OUTPUT_MODE_JSON
+    args: []
+  - name: ia
+    summary: Show all info (imports, exports, sections..)
+    cname: info_all
+    args: []
+  - name: ib
+    summary: Reload the current buffer for setting of the bin (use once only)
+    cname: info_reload_bin
+    args: []
+  # - name: ic
+  #   summary: Info about classes
+  #   subcommands:
+  #     - name: ic
+  #     - name: icc
+  #     - name: icg
+  #     - name: icq
+  #     - name: icqq

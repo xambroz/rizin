@@ -1134,3 +1134,35 @@ done:
 redone:
 	return 0;
 }
+
+RZ_IPI RzCmdStatus rz_info_archs_handler(RzCore *core, int argc, const char **argv, RzOutputMode mode) {
+	switch (mode) {
+	case RZ_OUTPUT_MODE_STANDARD:
+		rz_bin_list_archs(core->bin, NULL, 1);
+		break;
+	case RZ_OUTPUT_MODE_JSON: {
+		PJ *pj = rz_core_pj_new(core);
+		if (!pj) {
+			return RZ_CMD_STATUS_ERROR;
+		}
+
+		pj_o(pj);
+		rz_bin_list_archs(core->bin, pj, 'j');
+		pj_end(pj);
+		rz_cons_println(pj_string(pj));
+		pj_free(pj);
+		break;
+	}
+	default:
+		rz_return_val_if_reached(RZ_CMD_STATUS_ERROR);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_info_all_handler(RzCore *core, int argc, const char **argv) {
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_info_reload_bin_handler(RzCore *core, int argc, const char **argv) {
+	return RZ_CMD_STATUS_OK;
+}

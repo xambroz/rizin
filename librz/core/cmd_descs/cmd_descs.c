@@ -1548,6 +1548,29 @@ static const RzCmdDescHelp cmd_egg_help = {
 static const RzCmdDescHelp cmd_info_help = {
 	.summary = "Get info about opened binary file",
 };
+static const RzCmdDescArg info_archs_args[] = {
+	{ 0 },
+};
+static const RzCmdDescHelp info_archs_help = {
+	.summary = "List archs",
+	.args = info_archs_args,
+};
+
+static const RzCmdDescArg info_all_args[] = {
+	{ 0 },
+};
+static const RzCmdDescHelp info_all_help = {
+	.summary = "Show all info (imports, exports, sections..)",
+	.args = info_all_args,
+};
+
+static const RzCmdDescArg info_reload_bin_args[] = {
+	{ 0 },
+};
+static const RzCmdDescHelp info_reload_bin_help = {
+	.summary = "Reload the current buffer for setting of the bin (use once only)",
+	.args = info_reload_bin_args,
+};
 
 static const RzCmdDescHelp cmd_kuery_help = {
 	.summary = "Run sdb-query",
@@ -3330,6 +3353,14 @@ RZ_IPI void newshell_cmddescs_init(RzCore *core) {
 
 	RzCmdDesc *cmd_info_cd = rz_cmd_desc_oldinput_new(core->rcmd, root_cd, "i", rz_cmd_info, &cmd_info_help);
 	rz_warn_if_fail(cmd_info_cd);
+	RzCmdDesc *info_archs_cd = rz_cmd_desc_argv_modes_new(core->rcmd, cmd_info_cd, "iA", RZ_OUTPUT_MODE_STANDARD | RZ_OUTPUT_MODE_JSON, rz_info_archs_handler, &info_archs_help);
+	rz_warn_if_fail(info_archs_cd);
+
+	RzCmdDesc *info_all_cd = rz_cmd_desc_argv_new(core->rcmd, cmd_info_cd, "ia", rz_info_all_handler, &info_all_help);
+	rz_warn_if_fail(info_all_cd);
+
+	RzCmdDesc *info_reload_bin_cd = rz_cmd_desc_argv_new(core->rcmd, cmd_info_cd, "ib", rz_info_reload_bin_handler, &info_reload_bin_help);
+	rz_warn_if_fail(info_reload_bin_cd);
 
 	RzCmdDesc *cmd_kuery_cd = rz_cmd_desc_oldinput_new(core->rcmd, root_cd, "k", rz_cmd_kuery, &cmd_kuery_help);
 	rz_warn_if_fail(cmd_kuery_cd);
