@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 const SPECIAL_CHARACTERS = ["\\s", "@", "|", "#", '"', "'", ">", ";", "$", "`", "~", "\\", ",", "(", ")"];
+const SPEC_SPECIAL_CHARACTERS = ["\\s", "@", "|", "#", '"', "'", ">", ";", "$", "`", "~", "\\", ",", "(", ")", "/", ":"];
 
 const PF_SPECIAL_CHARACTERS = ["\\s", "@", "|", "#", '"', "'", ">", ";", "$", "`", "~", "\\", "(", ")"];
 
@@ -11,6 +12,14 @@ const SPECIAL_CHARACTERS_COMMA = SPECIAL_CHARACTERS.concat([","]);
 
 const ARG_IDENTIFIER_BASE = choice(
   repeat1(noneOf(...SPECIAL_CHARACTERS)),
+  "$$$",
+  "$$",
+  /\$[^\s@|#"'>;`~\\({) ]/,
+  /\${[^\r\n $}]+}/,
+  /\\./
+);
+const SPEC_ARG_IDENTIFIER_BASE = choice(
+  repeat1(noneOf(...SPEC_SPECIAL_CHARACTERS)),
   "$$$",
   "$$",
   /\$[^\s@|#"'>;`~\\({) ]/,
@@ -40,12 +49,14 @@ module.exports = grammar({
   extras: ($) => [$._comment, /[ \t]*/],
 
   externals: ($) => [
-    $.cmd_identifier,
+    $._cmd_identifier,
     $._help_command,
     $.file_descriptor,
     $._eq_sep_concat,
     $._concat,
     $._concat_pf_dot,
+    $._table_sep,
+    $._spec_sep,
   ],
 
   inline: ($) => [$.cmd_delimiter, $.cmd_delimiter_singleline, $._comment],
@@ -411,6 +422,8 @@ module.exports = grammar({
     _any_command: ($) => /[^\r\n;~|]+/,
 
     arg_identifier: ($) => argIdentifier(ARG_IDENTIFIER_BASE),
+    spec_arg_identifier: ($) => argIdentifier(SPEC_ARG_IDENTIFIER_BASE),
+
     double_quoted_arg: ($) =>
       seq(
         '"',
@@ -427,6 +440,31 @@ module.exports = grammar({
 
     cmd_delimiter: ($) => choice("\n", "\r", $.cmd_delimiter_singleline),
     cmd_delimiter_singleline: ($) => choice(";"),
+
+    table_args: ($) => repeat1(seq(
+      $._table_sep,
+      alias($.spec_arg_identifier, $.arg_identifier),
+    )),
+    table_spec: ($) => seq(
+      field("table_col", alias($.spec_arg_identifier, $.arg_identifier)),
+      $._table_sep,
+      field("table_op", alias($.spec_arg_identifier, $.arg_identifier)),
+      optional($.table_args),
+    ),
+    specifiers: ($) => seq(
+      repeat1(seq(
+        $._spec_sep,
+        $.table_spec,
+      )),
+      optional(seq(
+        $._spec_sep,
+        alias($.spec_arg_identifier, $.arg_identifier),
+      )),
+    ),
+    cmd_identifier: ($) => seq(
+      field("id", $._cmd_identifier),
+      field("extra", optional($.specifiers)),
+    )
   },
 });
 

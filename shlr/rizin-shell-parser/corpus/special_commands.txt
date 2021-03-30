@@ -226,7 +226,7 @@ Interpreter commands
 ===================
 
 #!
-#!python arg0
+#!python arg1
 #!rust
 #!?
 
@@ -302,8 +302,8 @@ equal commands
 == 3
 =!=
 !=!
-=: host:3000 cmd
-=&: 3000
+=r host:3000 cmd
+=&r 3000
 
 ---
 

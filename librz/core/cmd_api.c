@@ -656,7 +656,13 @@ static RzCmdStatus argv_call_cb(RzCmd *cmd, RzCmdDesc *cd, RzCmdParsedArgs *args
 			pj_free(state.d.pj);
 			break;
 		case RZ_OUTPUT_MODE_TABLE:
-			s = rz_table_tofancystring(state.d.t);
+			if (args->extra) {
+				bool res = rz_table_query(state.d.t, args->extra);
+				if (!res) {
+					return RZ_CMD_STATUS_INVALID;
+				}
+			}
+			s = rz_table_tostring(state.d.t);
 			rz_cons_printf("%s", s);
 			free(s);
 			rz_table_free(state.d.t);

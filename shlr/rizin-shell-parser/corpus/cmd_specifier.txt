@@ -1,0 +1,55 @@
+==============
+One table spec
+==============
+
+afbt:c1/sort/inc
+
+---
+
+(commands
+  (arged_command
+    command: (cmd_identifier
+      extra: (specifiers
+               (table_spec
+                 table_col: (arg_identifier)
+                 table_op: (arg_identifier)
+                 (table_args
+                   (arg_identifier)))))))
+
+================
+Multi-table-args
+================
+
+afbt:*/page/1/10
+
+---
+
+(commands
+  (arged_command
+    command: (cmd_identifier
+      extra: (specifiers
+               (table_spec
+                 table_col: (arg_identifier)
+                 table_op: (arg_identifier)
+                 (table_args
+                   (arg_identifier)
+                   (arg_identifier)))))))
+
+=================
+Table with format
+=================
+
+afbt:c1/sort/inc:json
+
+---
+
+(commands
+  (arged_command
+    command: (cmd_identifier
+      extra: (specifiers
+               (table_spec
+                 table_col: (arg_identifier)
+                 table_op: (arg_identifier)
+                 (table_args
+                   (arg_identifier)))
+               (arg_identifier)))))
