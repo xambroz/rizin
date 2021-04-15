@@ -624,6 +624,7 @@ RzBinPlugin rz_bin_plugin_coff = {
 	.baddr = &baddr,
 	.binsym = &binsym,
 	.entries = &entries,
+	.maps = &rz_bin_maps_of_file_sections,
 	.sections = &sections,
 	.symbols = &symbols,
 	.imports = &imports,
