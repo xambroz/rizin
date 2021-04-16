@@ -178,6 +178,7 @@ RzBinPlugin rz_bin_plugin_dol = {
 	.baddr = &baddr,
 	.check_buffer = &check_buffer,
 	.entries = &entries,
+	.maps = &rz_bin_maps_of_file_sections,
 	.sections = &sections,
 	.info = &info,
 };
