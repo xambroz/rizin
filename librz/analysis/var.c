@@ -136,13 +136,8 @@ RZ_API RzAnalysisVar *rz_analysis_function_set_var(RzAnalysisFunction *fcn, int 
 	return var;
 }
 
-RZ_API void rz_analysis_var_set_type(RzAnalysisVar *var, const char *type) {
-	char *nt = strdup(type);
-	if (!nt) {
-		return;
-	}
-	free(var->type);
-	var->type = nt;
+RZ_API void rz_analysis_var_set_type(RzAnalysisVar *var, const RzType *type) {
+	var->type = type;
 	shadow_var_struct_members(var);
 }
 

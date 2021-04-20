@@ -53,7 +53,7 @@ static bool type_pos_hit(RzAnalysis *analysis, Sdb *trace, bool in_stack, int id
 	return SDB_CONTAINS(idx, place);
 }
 
-static void __var_rename(RzAnalysis *analysis, RzAnalysisVar *v, const char *name, ut64 addr) {
+static void var_rename(RzAnalysis *analysis, RzAnalysisVar *v, const char *name, ut64 addr) {
 	if (!name || !v) {
 		return;
 	}
@@ -62,6 +62,7 @@ static void __var_rename(RzAnalysis *analysis, RzAnalysisVar *v, const char *nam
 	}
 	bool is_default = (rz_str_startswith(v->name, VARPREFIX) || rz_str_startswith(v->name, ARGPREFIX));
 	if (*name == '*') {
+		rz_warn_if_reached();
 		name++;
 	}
 	// longer name tends to be meaningful like "src" instead of "s1"
@@ -75,73 +76,46 @@ static void __var_rename(RzAnalysis *analysis, RzAnalysisVar *v, const char *nam
 	rz_analysis_var_rename(v, name, false);
 }
 
-static void __var_retype(RzAnalysis *analysis, RzAnalysisVar *var, const char *vname, const char *type, bool ref, bool pfx) {
-	rz_return_if_fail(analysis && var && type);
-	// XXX types should be passed without spaces to trim
-	type = rz_str_trim_head_ro(type);
-	// default type if none is provided
-	if (!*type) {
-		type = "int";
+static void var_type_set_sign(RzAnalysis *analysis, RzAnalysisVar *var, bool sign) {
+	rz_return_if_fail(analysis && var);
+	// Check if it's number first
+	if (rz_type_atomic_is_num(analysis->typedb, var->type)) {
+		rz_type_set_sign(analysis->typedb, var->type);
 	}
-	bool is_ptr = (vname && *vname == '*');
+}
+
+// TODO: Handle also non-atomic types here
+static void var_type_set(RzAnalysis *analysis, RzAnalysisVar *var, const RzType *type, bool ref) {
+	rz_return_if_fail(analysis && var && type);
+	RzTypeDB *typedb = analysis->typedb;
 	// removing this return makes 64bit vars become 32bit
-	if (!strncmp(type, "int", 3) || (!is_ptr && !strcmp(type, "void"))) {
-		// default or void type
+	if (rz_type_is_default(typedb, type) || rz_type_is_void(typedb, type)) {
+		// default or void (not void* !) type
 		return;
 	}
-	const char *expand = var->type;
-	if (!strcmp(var->type, "int32_t")) {
-		expand = "int";
-	} else if (!strcmp(var->type, "uint32_t")) {
-		expand = "unsigned int";
-	} else if (!strcmp(var->type, "uint64_t")) {
-		expand = "unsigned long long";
-	}
-	const char *tmp = strstr(expand, "int");
-	bool is_default = tmp != NULL;
-	if (!is_default && strncmp(var->type, "void", 4)) {
+	if (!rz_type_is_default(typedb, var->type) && !rz_type_is_void_ptr(var->type)) {
 		// return since type is already propagated
 		// except for "void *", since "void *" => "char *" is possible
 		return;
 	}
-	RzStrBuf *sb = rz_strbuf_new("");
-	if (pfx) {
-		if (is_default && strncmp(var->type, "signed", 6)) {
-			rz_strbuf_setf(sb, "%s %s", type, tmp);
-		} else {
-			rz_strbuf_free(sb);
-			return;
-		}
-	} else {
-		rz_strbuf_set(sb, type);
-	}
-	if (!strncmp(rz_strbuf_get(sb), "const ", 6)) {
-		// Dropping const from type
-		//TODO: Inferring const type
-		rz_strbuf_setf(sb, "%s", type + 6);
-	}
-	if (is_ptr) {
-		//type *ptr => type *
-		rz_strbuf_append(sb, " *");
-	}
+	// Make a pointer of the existing type
 	if (ref) {
-		if (rz_str_endswith(rz_strbuf_get(sb), "*")) { // type * => type **
-			rz_strbuf_append(sb, "*");
-		} else { //  type => type *
-			rz_strbuf_append(sb, " *");
-		}
+		RzType *ptrtype = rz_type_pointer_of_type(typedb, var->type);
+		rz_analysis_var_set_type(var, ptrtype);
+		return;
 	}
 
-	char *tmp1 = rz_strbuf_get(sb);
-	if (rz_str_startswith(tmp1, "unsigned long long")) {
-		rz_strbuf_set(sb, "uint64_t");
-	} else if (rz_str_startswith(tmp1, "unsigned")) {
-		rz_strbuf_set(sb, "uint32_t");
-	} else if (rz_str_startswith(tmp1, "int")) {
-		rz_strbuf_set(sb, "int32_t");
+	rz_analysis_var_set_type(var, type);
+}
+
+static void var_type_set_str(RzAnalysis *analysis, RzAnalysisVar *var, const char *type, bool ref) {
+	rz_return_if_fail(analysis && var && type);
+	RzTypeDB *tdb = analysis->typedb;
+	RzType *realtype = rz_type_parse(ctx->analysis->typedb->parser, type, NULL);
+	if (!realtype) {
+		return;
 	}
-	rz_analysis_var_set_type(var, rz_strbuf_get(sb));
-	rz_strbuf_free(sb);
+	var_type_set(analysis, var, realtype, ref);
 }
 
 static void get_src_regname(RzCore *core, ut64 addr, char *regname, int size) {
@@ -236,7 +210,7 @@ static RzList *parse_format(RzCore *core, char *fmt) {
 	return ret;
 }
 
-static void retype_callee_arg(RzAnalysis *analysis, const char *callee_name, bool in_stack, const char *place, int size, const char *type) {
+static void retype_callee_arg(RzAnalysis *analysis, const char *callee_name, bool in_stack, const char *place, int size, const RzType *type) {
 	RzAnalysisFunction *fcn = rz_analysis_get_function_byname(analysis, callee_name);
 	if (!fcn) {
 		return;
@@ -246,7 +220,7 @@ static void retype_callee_arg(RzAnalysis *analysis, const char *callee_name, boo
 		if (!var) {
 			return;
 		}
-		__var_retype(analysis, var, NULL, type, false, false);
+		var_type_set(analysis, var, type, false);
 	} else {
 		RzRegItem *item = rz_reg_get(analysis->reg, place, -1);
 		if (!item) {
@@ -256,13 +230,11 @@ static void retype_callee_arg(RzAnalysis *analysis, const char *callee_name, boo
 		if (!rvar) {
 			return;
 		}
-		char *t = strdup(type);
-		__var_retype(analysis, rvar, NULL, type, false, false);
+		var_type_set(analysis, rvar, type, false);
 		RzAnalysisVar *lvar = rz_analysis_var_get_dst_var(rvar);
 		if (lvar) {
-			__var_retype(analysis, lvar, NULL, t, false, false);
+			var_type_set(analysis, lvar, type, false);
 		}
-		free(t);
 	}
 }
 
@@ -399,8 +371,8 @@ static void type_match(RzCore *core, char *fcn_name, ut64 addr, ut64 baddr, cons
 				if (var) {
 					if (!userfnc) {
 						// not a userfunction, propagate the callee's arg types into our function's vars
-						__var_retype(analysis, var, name, type, memref, false);
-						__var_rename(analysis, var, name, addr);
+						var_type_set(analysis, var, type, memref);
+						var_rename(analysis, var, name, addr);
 					} else {
 						// callee is a userfunction, propagate our variable's type into the callee's args
 						retype_callee_arg(analysis, fcn_name, in_stack, place, size, var->type);
@@ -416,8 +388,8 @@ static void type_match(RzCore *core, char *fcn_name, ut64 addr, ut64 baddr, cons
 				if (var) {
 					if (!userfnc) {
 						// not a userfunction, propagate the callee's arg types into our function's vars
-						__var_retype(analysis, var, name, type, memref, false);
-						__var_rename(analysis, var, name, addr);
+						var_type_set(analysis, var, type, memref);
+						var_rename(analysis, var, name, addr);
 					} else {
 						// callee is a userfunction, propagate our variable's type into the callee's args
 						retype_callee_arg(analysis, fcn_name, in_stack, place, size, var->type);
@@ -441,7 +413,7 @@ static void type_match(RzCore *core, char *fcn_name, ut64 addr, ut64 baddr, cons
 				get_src_regname(core, instr_addr, tmp, sizeof(tmp));
 				ut64 ptr = get_addr(trace, tmp, j);
 				if (ptr == xaddr) {
-					__var_retype(analysis, var, name, type ? type : "int", memref, false);
+					var_type_set(analysis, var, type ? type : "int", memref);
 				}
 			}
 		}
@@ -504,7 +476,7 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 
 	HtUP *op_cache = NULL;
 	char *fcn_name = NULL;
-	char *ret_type = NULL;
+	RzType *ret_type = NULL;
 	bool str_flag = false;
 	bool prop = false;
 	bool prev_var = false;
@@ -594,9 +566,9 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 						type_match(core, fcn_name, addr, bb->addr, cc, prev_idx, userfnc, callee_addr, op_cache);
 						prev_idx = cur_idx;
 						RZ_FREE(ret_type);
-						const char *rt = rz_type_func_ret(typedb, fcn_name);
+						RzType *rt = rz_type_func_ret(typedb, fcn_name);
 						if (rt) {
-							ret_type = strdup(rt);
+							ret_type = rt;
 						}
 						RZ_FREE(ret_reg);
 						const char *rr = rz_analysis_cc_ret(analysis, cc);
@@ -614,7 +586,7 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 							RzAnalysisVar *mopvar = rz_analysis_get_used_function_var(analysis, mop->addr);
 							ut32 type = mop->type & RZ_ANALYSIS_OP_TYPE_MASK;
 							if (type == RZ_ANALYSIS_OP_TYPE_MOV) {
-								__var_rename(analysis, mopvar, "canary", addr);
+								var_rename(analysis, mopvar, "canary", addr);
 							}
 						}
 						rz_analysis_op_free(mop);
@@ -629,7 +601,7 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 				get_src_regname(core, aop->addr, src, sizeof(src));
 				if (ret_reg && *src && strstr(ret_reg, src)) {
 					if (var && aop->direction == RZ_ANALYSIS_OP_DIR_WRITE) {
-						__var_retype(analysis, var, NULL, ret_type, false, false);
+						var_type_set(analysis, var, ret_type, false);
 						resolved = true;
 					} else if (type == RZ_ANALYSIS_OP_TYPE_MOV) {
 						RZ_FREE(ret_reg);
@@ -654,7 +626,7 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 						get_src_regname(core, next_op->addr, nsrc, sizeof(nsrc));
 						if (ret_reg && *nsrc && strstr(ret_reg, nsrc) && var &&
 							aop->direction == RZ_ANALYSIS_OP_DIR_READ) {
-							__var_retype(analysis, var, NULL, ret_type, true, false);
+							var_type_set(analysis, var, ret_type, true);
 						}
 					}
 					free(foo);
@@ -668,12 +640,14 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 						sign = true;
 					} else {
 						// cmp [local_ch], rax ; jb
-						__var_retype(analysis, var, NULL, "unsigned", false, true);
+						// set to "unsigned"
+						var_type_set_sign(analysis, var, false);
 					}
 				}
 				// cmp [local_ch], rax ; jge
 				if (sign || aop->sign) {
-					__var_retype(analysis, var, NULL, "signed", false, true);
+					// set to "signed"
+					var_type_set_sign(analysis, var, true);
 				}
 				// lea rax , str.hello  ; mov [local_ch], rax;
 				// mov rdx , [local_4h] ; mov [local_8h], rdx;
@@ -682,10 +656,10 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 					get_src_regname(core, addr, reg, sizeof(reg));
 					bool match = strstr(prev_dest, reg) != NULL;
 					if (str_flag && match) {
-						__var_retype(analysis, var, NULL, "const char *", false, false);
+						var_type_set_str(analysis, var, "const char *", false);
 					}
 					if (prop && match && prev_var) {
-						__var_retype(analysis, var, NULL, prev_type, false, false);
+						var_type_set(analysis, var, prev_type, false);
 					}
 				}
 				if (chk_constraint && var && (type == RZ_ANALYSIS_OP_TYPE_CMP && aop->disp != UT64_MAX) && next_op && next_op->type == RZ_ANALYSIS_OP_TYPE_CJMP) {
@@ -740,7 +714,7 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 				}
 				// mov dword [local_4h], str.hello;
 				if (var && str_flag) {
-					__var_retype(analysis, var, NULL, "const char *", false, false);
+					var_type_set_str(analysis, var, "const char *", false);
 				}
 				const char *query = sdb_fmt("%d.reg.write", cur_idx);
 				prev_dest = sdb_const_get(trace, query, 0);
@@ -764,16 +738,16 @@ RZ_API void rz_core_analysis_type_match(RzCore *core, RzAnalysisFunction *fcn) {
 		}
 		if (lvar) {
 			// Propagate local var type = to => register-based var
-			__var_retype(analysis, rvar, NULL, lvar->type, false, false);
+			var_type_set(analysis, rvar, lvar->type, false);
 			// Propagate local var type <= from = register-based var
-			__var_retype(analysis, lvar, NULL, rvar->type, false, false);
+			var_type_set(analysis, lvar, rvar->type, false);
 		}
 	}
 	rz_list_free(list);
 out_function:
 	ht_up_free(op_cache);
 	free(ret_reg);
-	free(ret_type);
+	rz_type_free(ret_type);
 	rz_cons_break_pop();
 	analysis_emul_restore(core, hc, dt, et);
 }

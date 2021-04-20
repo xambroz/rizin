@@ -6613,7 +6613,11 @@ RZ_IPI char *rz_core_analysis_function_signature(RzCore *core, RzOutputMode mode
 	if (!fcn) {
 		return NULL;
 	}
-
+	RzType *ret_type = rz_type_func_ret(core->analysis->typedb, key);
+	if (!ret_type) {
+		return NULL;
+	}
+	const char *ret_type_str = rz_type_as_string(core->analysis->typedb, ret_type);
 	char *signature = NULL;
 
 	if (mode == RZ_OUTPUT_MODE_JSON) {
@@ -6629,12 +6633,11 @@ RZ_IPI char *rz_core_analysis_function_signature(RzCore *core, RzOutputMode mode
 		}
 
 		if (key) {
-			const char *fcn_type = rz_type_func_ret(core->analysis->typedb, key);
 			int nargs = rz_type_func_args_count(core->analysis->typedb, key);
-			if (fcn_type) {
+			if (ret_type_str) {
 				pj_o(j);
 				pj_ks(j, "name", rz_str_get_null(key));
-				pj_ks(j, "return", rz_str_get_null(fcn_type));
+				pj_ks(j, "return", rz_str_get_null(ret_type_str));
 				pj_k(j, "args");
 				pj_a(j);
 				if (nargs) {

@@ -126,10 +126,12 @@ static RzBaseType *get_struct_type(RzTypeDB *typedb, const char *sname) {
 			free(values);
 			goto error;
 		}
+		// Parse type as a C string
+		RzType *ttype = rz_type_parse(typedb->parser, type);
 		offset = sdb_anext(offset, NULL);
 		RzTypeStructMember cas = {
 			.name = strdup(cur),
-			.type = strdup(type),
+			.type = ttype,
 			.offset = strtol(offset, NULL, 10)
 		};
 
@@ -746,11 +748,13 @@ static void save_typedef(const RzTypeDB *typedb, const RzBaseType *type) {
 	rz_strbuf_init(&key);
 	rz_strbuf_init(&val);
 
+	char *ttype = rz_type_as_string(typedb, type->type);
 	sdb_set(typedb->sdb_types,
 		rz_strbuf_setf(&key, "typedef.%s", sname),
-		rz_strbuf_setf(&val, "%s", type->type), 0);
+		rz_strbuf_setf(&val, "%s", ttype), 0);
 
 	free(sname);
+	free(ttype);
 
 	rz_strbuf_fini(&key);
 	rz_strbuf_fini(&val);
@@ -860,7 +864,7 @@ RZ_API RZ_OWN char *rz_type_db_base_type_as_string(const RzTypeDB *typedb, RZ_NO
 		rz_strbuf_appendf(buf, "enum %s { ", type->name);
 		RzTypeEnumCase *cas;
 		rz_vector_foreach(&type->enum_data.cases, cas) {
-			rz_strbuf_appendf(buf, "%s = 0x" PFMT64x ", ", cas->name, cas->val);
+			rz_strbuf_appendf(buf, "%s = 0x%" PFMT64x ", ", cas->name, cas->val);
 		}
 		rz_strbuf_append(buf, " };");
 		break;
